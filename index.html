@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ivy Lee Method - Weekly</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="apple-touch-icon" href="icon.svg">
+</head>
+<body data-theme="sakura">
+    <div class="app-layout">
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-titles">
+                    <h1>Ivy Lee Method</h1>
+                    <p>明日のための、最も重要な6つのタスクを1週間の視点で</p>
+                </div>
+                <div class="header-right-group">
+                    <div class="controls-row">
+                        <select id="theme-selector" class="theme-select" aria-label="テーマ選択">
+                            <option value="sakura">🌸 Sakura (さくら)</option>
+                            <option value="ocean">🌊 Ocean (海)</option>
+                            <option value="sunlight">🌻 Sunlight (ひまわり)</option>
+                            <option value="forest">🌿 Forest (森)</option>
+                            <option value="night">🌃 Night Sky (夜空)</option>
+                        </select>
+                        <button id="show-history-btn" class="secondary-btn">🗓️ 完了履歴</button>
+                    </div>
+                    <div class="category-toggle">
+                        <button id="tab-work" class="tab-btn active" data-category="work">💼 仕事</button>
+                        <button id="tab-private" class="tab-btn" data-category="private">🏠 プライベート</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <main class="main-content">
+            <div class="week-container" id="week-container">
+                <!-- JS will inject 7 day cards here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>タスク完了履歴 <span id="history-category-label"></span></h2>
+                <button id="close-modal-btn" class="close-btn" data-close="history-modal" aria-label="閉じる">×</button>
+            </div>
+            <div class="modal-body">
+                <ul id="history-list" class="history-list">
+                    <!-- History items will be injected here via JS -->
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button id="clear-history-btn" class="danger-btn">現在のカテゴリの履歴をすべてクリア</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('SW registered successfully');
+                }).catch(err => {
+                    console.log('SW registration failed: ', err);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
