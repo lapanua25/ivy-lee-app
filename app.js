@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- 1. Data Store Initialization & Migration ----
     let rawStore = localStorage.getItem('ivyLeeData');
     let store = rawStore ? JSON.parse(rawStore) : null;
-    let currentCategory = 'work'; // default 'work' or 'private'
+    let currentCategory = localStorage.getItem('ivyLeeCategory') || 'private';
     
     // Theme logic
     let currentTheme = localStorage.getItem('ivyLeeTheme') || 'sakura';
@@ -48,19 +48,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- 2. Category Toggle Logic ----
-    function switchCategory(category) {
+    function switchCategory(category, isInitial = false) {
         currentCategory = category;
+        localStorage.setItem('ivyLeeCategory', category);
+        
         // update UI buttons
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         document.getElementById(`tab-${category}`).classList.add('active');
         
-        // re-render week container with slight animation
-        const weekContainer = document.getElementById('week-container');
-        weekContainer.style.opacity = '0';
-        setTimeout(() => {
+        if (isInitial) {
             renderWeek();
-            weekContainer.style.opacity = '1';
-        }, 200);
+        } else {
+            // re-render week container with slight animation
+            const weekContainer = document.getElementById('week-container');
+            weekContainer.style.opacity = '0';
+            setTimeout(() => {
+                renderWeek();
+                weekContainer.style.opacity = '1';
+            }, 200);
+        }
     }
     
     // Event listener for Tabs
@@ -324,5 +330,5 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // INIT
-    renderWeek();
+    switchCategory(currentCategory, true);
 });
