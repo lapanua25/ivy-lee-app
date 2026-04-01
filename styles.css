@@ -145,6 +145,23 @@ body[data-theme="night"] .secondary-btn:hover { background: rgba(255,255,255,0.2
     flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; padding: 20px 0;
 }
 
+.week-navigation {
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.1); border-top: var(--glass-border); padding: 8px 40px; gap: 10px;
+}
+body[data-theme="night"] .week-navigation { background: rgba(0,0,0,0.1); border-top: 1px solid rgba(255, 255, 255, 0.05); }
+
+.current-week-label { font-size: 13px; font-weight: 700; color: var(--text-color); margin: 0 10px; }
+
+.icon-btn {
+    background: transparent; color: var(--text-muted); padding: 6px 12px; border-radius: 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: 0.2s;
+}
+.icon-btn:hover { background: rgba(0,0,0,0.05); color: var(--primary-color); }
+body[data-theme="night"] .icon-btn:hover { background: rgba(255,255,255,0.1); }
+
+.border-btn { border: 1px solid var(--border-color); }
+
 /* 1週間 俯瞰(ふかん) グリッドレイアウト */
 .week-container {
     display: grid;
@@ -157,6 +174,29 @@ body[data-theme="night"] .secondary-btn:hover { background: rgba(255,255,255,0.2
 @media (min-width: 1400px) {
     /* 大画面なら上4日、下3日など綺麗に収める */
     .week-container { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* 俯瞰モード (Compact View) */
+body.compact-view .week-container {
+    gap: 10px;
+}
+body.compact-view .day-card { padding: 12px; }
+body.compact-view .card-header h2 { font-size: 14px; margin: 0 0 10px; }
+body.compact-view .task-input-section,
+body.compact-view .actions-section { display: none; }
+body.compact-view .task-list { gap: 4px; }
+body.compact-view .task-item { padding: 6px; }
+body.compact-view .task-text { font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+@media (min-width: 900px) {
+    body.compact-view .week-container { grid-template-columns: repeat(7, 1fr); }
+}
+@media (max-width: 899px) {
+    body.compact-view .week-container { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 500px) {
+    body.compact-view .week-container { grid-template-columns: 1fr; }
+    body.compact-view .task-text { white-space: normal; } /* allow text wrapping on very small screens */
 }
 
 .day-card {
@@ -285,4 +325,6 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
     .header-content { flex-direction: column; align-items: flex-start; }
     .header-right-group { width: 100%; justify-content: space-between; }
     .controls-row { flex-wrap: wrap; }
+    .week-navigation { padding: 8px 20px; justify-content: space-between; gap: 4px; }
+    .current-week-label { font-size: 11px; margin: 0; text-align: center; }
 }

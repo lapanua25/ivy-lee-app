@@ -27,6 +27,7 @@
                             <option value="forest">🌿 Forest (森)</option>
                             <option value="night">🌃 Night Sky (夜空)</option>
                         </select>
+                        <button id="toggle-compact-btn" class="secondary-btn">🔍 俯瞰モード</button>
                         <button id="show-history-btn" class="secondary-btn">🗓️ 完了履歴</button>
                     </div>
                     <div class="category-toggle">
@@ -34,6 +35,13 @@
                         <button id="tab-private" class="tab-btn" data-category="private">🏠 プライベート</button>
                     </div>
                 </div>
+            </div>
+            <!-- Week Navigation -->
+            <div class="week-navigation">
+                <button id="prev-week-btn" class="icon-btn" aria-label="前の週">◀ 先週</button>
+                <div class="current-week-label" id="current-week-label">--年--月--日 〜 --月--日</div>
+                <button id="next-week-btn" class="icon-btn" aria-label="次の週">来週 ▶</button>
+                <button id="today-btn" class="icon-btn border-btn" style="margin-left:auto; font-size: 11px; padding: 4px 8px;">今日に戻る</button>
             </div>
         </header>
         

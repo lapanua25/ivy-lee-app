@@ -24,7 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const today = new Date();
+    today.setHours(0,0,0,0);
     const todayYMD = formatDateYMD(today);
+    let currentStartDate = new Date(today);
 
     // Initial Migration logic
     if (!store || (!store.work && !store.private)) {
@@ -85,11 +87,17 @@ document.addEventListener('DOMContentLoaded', () => {
         weekContainer.innerHTML = '';
         const catData = store[currentCategory];
 
+        // Update weak header label
+        const endD = new Date(currentStartDate);
+        endD.setDate(endD.getDate() + 6);
+        document.getElementById('current-week-label').textContent = 
+            `${currentStartDate.getFullYear()}年${currentStartDate.getMonth()+1}月${currentStartDate.getDate()}日 〜 ${endD.getMonth()+1}月${endD.getDate()}日`;
+
         for (let i = 0; i < 7; i++) {
-            const d = new Date(today);
+            const d = new Date(currentStartDate);
             d.setDate(d.getDate() + i);
             const dateStr = formatDateYMD(d);
-            const isToday = i === 0;
+            const isToday = dateStr === todayYMD;
             const title = isToday ? `今日 ${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})` 
                           : `${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`;
 
@@ -216,6 +224,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.id === 'show-history-btn') {
             renderHistory();
             document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        if (e.target.id === 'toggle-compact-btn') {
+            document.body.classList.toggle('compact-view');
+            e.target.textContent = document.body.classList.contains('compact-view') ? '📄 詳細モード' : '🔍 俯瞰モード';
+        }
+        
+        if (e.target.id === 'prev-week-btn') {
+             currentStartDate.setDate(currentStartDate.getDate() - 7);
+             renderWeek();
+        }
+        
+        if (e.target.id === 'next-week-btn') {
+             currentStartDate.setDate(currentStartDate.getDate() + 7);
+             renderWeek();
+        }
+        
+        if (e.target.id === 'today-btn') {
+             currentStartDate = new Date(today);
+             renderWeek();
         }
         
         if (e.target.hasAttribute('data-close')) {
