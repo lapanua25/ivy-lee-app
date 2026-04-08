@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentCategory = localStorage.getItem('ivyLeeCategory') || 'private';
     
     // Theme logic
-    let currentTheme = localStorage.getItem('ivyLeeTheme') || 'sakura';
+    let currentTheme = localStorage.getItem('ivyLeeTheme') || 'dark';
     document.body.setAttribute('data-theme', currentTheme);
     const themeSelector = document.getElementById('theme-selector');
     if (themeSelector) themeSelector.value = currentTheme;
@@ -86,12 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderWeek() {
         weekContainer.innerHTML = '';
         const catData = store[currentCategory];
-
-        // Update weak header label
-        const endD = new Date(currentStartDate);
-        endD.setDate(endD.getDate() + 6);
-        document.getElementById('current-week-label').textContent = 
-            `${currentStartDate.getFullYear()}年${currentStartDate.getMonth()+1}月${currentStartDate.getDate()}日 〜 ${endD.getMonth()+1}月${endD.getDate()}日`;
 
         for (let i = 0; i < 7; i++) {
             const d = new Date(currentStartDate);
@@ -228,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (e.target.id === 'toggle-compact-btn') {
             document.body.classList.toggle('compact-view');
-            e.target.textContent = document.body.classList.contains('compact-view') ? '📄 詳細モード' : '🔍 俯瞰モード';
         }
         
         if (e.target.id === 'prev-week-btn') {

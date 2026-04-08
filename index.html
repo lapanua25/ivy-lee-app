@@ -21,27 +21,26 @@
                 <div class="header-right-group">
                     <div class="controls-row">
                         <select id="theme-selector" class="theme-select" aria-label="テーマ選択">
-                            <option value="sakura">🌸 Sakura (さくら)</option>
-                            <option value="ocean">🌊 Ocean (海)</option>
-                            <option value="sunlight">🌻 Sunlight (ひまわり)</option>
-                            <option value="forest">🌿 Forest (森)</option>
-                            <option value="night">🌃 Night Sky (夜空)</option>
+                            <option value="light">Cloud White</option>
+                            <option value="blue">Deep Ocean</option>
+                            <option value="dark">Midnight Dark</option>
+                            <option value="neon">Cyber Neon</option>
+                            <option value="monochrome">Monochrome</option>
                         </select>
-                        <button id="toggle-compact-btn" class="secondary-btn">🔍 俯瞰モード</button>
-                        <button id="show-history-btn" class="secondary-btn">🗓️ 完了履歴</button>
+                        <button id="toggle-compact-btn" class="secondary-btn">俯瞰モード切替</button>
+                        <button id="show-history-btn" class="secondary-btn">完了履歴</button>
                     </div>
                     <div class="category-toggle">
-                        <button id="tab-work" class="tab-btn active" data-category="work">💼 仕事</button>
-                        <button id="tab-private" class="tab-btn" data-category="private">🏠 プライベート</button>
+                        <button id="tab-work" class="tab-btn active" data-category="work">仕事</button>
+                        <button id="tab-private" class="tab-btn" data-category="private">プライベート</button>
                     </div>
                 </div>
             </div>
             <!-- Week Navigation -->
-            <div class="week-navigation">
-                <button id="prev-week-btn" class="icon-btn" aria-label="前の週">◀ 先週</button>
-                <div class="current-week-label" id="current-week-label">--年--月--日 〜 --月--日</div>
-                <button id="next-week-btn" class="icon-btn" aria-label="次の週">来週 ▶</button>
-                <button id="today-btn" class="icon-btn border-btn" style="margin-left:auto; font-size: 11px; padding: 4px 8px;">今日に戻る</button>
+            <div class="week-navigation" style="justify-content: center; gap: 20px;">
+                <button id="prev-week-btn" class="icon-btn border-btn" aria-label="前の週">◀ 先週</button>
+                <button id="today-btn" class="icon-btn" style="font-size: 11px; padding: 4px 12px; background: rgba(0,0,0,0.05);">今日</button>
+                <button id="next-week-btn" class="icon-btn border-btn" aria-label="次の週">来週 ▶</button>
             </div>
         </header>
         
