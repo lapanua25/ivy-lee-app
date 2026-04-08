@@ -33,11 +33,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldTasksByDate = store?.tasksByDate || {};
         const oldHistory = store?.history || [];
         store = {
-            work: { tasksByDate: oldTasksByDate, history: oldHistory },
-            private: { tasksByDate: {}, history: [] }
+            work: { tasksByDate: oldTasksByDate, history: oldHistory, routines: [] },
+            private: { tasksByDate: {}, history: [], routines: [] }
         };
         saveStore();
     }
+    
+    // Ensure routines exists in both categories
+    if (!store.work.routines) store.work.routines = [];
+    if (!store.private.routines) store.private.routines = [];
+    saveStore();
     
     // Further check for extremely old "ivyLeeTasks" object
     const oldTasks = JSON.parse(localStorage.getItem('ivyLeeTasks'));
@@ -97,11 +102,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const tasks = catData.tasksByDate[dateStr] || [];
             
+            // Auto-inject routines if space is available
+            if (tasks.length < 6) { injectRoutines(dateStr); }
+            const currentTasks = catData.tasksByDate[dateStr] || [];
+
             const card = document.createElement('div');
             card.className = `day-card ${isToday ? 'today-card' : ''}`;
             
-            const disabledAttr = tasks.length >= 6 ? 'disabled' : '';
-            const placeholder = tasks.length >= 6 ? '最大6つまで設定可能' : '新しいタスクを追加...';
+            const disabledAttr = currentTasks.length >= 6 ? 'disabled' : '';
+            const placeholder = currentTasks.length >= 6 ? '最大6つまで設定可能' : '新しいタスクを追加...';
             
             let html = `
                 <div class="card-header">
@@ -115,14 +124,18 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             for (let j = 0; j < 6; j++) {
-                const task = tasks[j];
+                const task = currentTasks[j];
                 if (task) {
                     html += `
                         <li class="task-item ${task.completed ? 'completed' : ''}">
                             <div class="rank">${j + 1}</div>
                             <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} data-date="${dateStr}" data-id="${task.id}">
                             <span class="task-text">${escapeHTML(task.text)}</span>
-                            <button class="delete-btn" aria-label="削除" data-date="${dateStr}" data-id="${task.id}">×</button>
+                            <div class="task-actions">
+                                <button class="move-btn" data-action="up" data-date="${dateStr}" data-id="${task.id}" ${j===0 ? 'disabled' : ''}>▲</button>
+                                <button class="move-btn" data-action="down" data-date="${dateStr}" data-id="${task.id}" ${j===currentTasks.length-1 ? 'disabled' : ''}>▼</button>
+                                <button class="delete-btn" aria-label="削除" data-date="${dateStr}" data-id="${task.id}">×</button>
+                            </div>
                         </li>
                     `;
                 } else {
@@ -136,9 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             html += `</ul>`;
             
-            const allCompleted = tasks.length > 0 && tasks.every(t => t.completed);
+            const allCompleted = currentTasks.length > 0 && currentTasks.every(t => t.completed);
             
-            if (tasks.some(t => !t.completed) || tasks.length === 0) {
+            if (currentTasks.some(t => !t.completed) || currentTasks.length === 0) {
                 const nextD = new Date(d);
                 nextD.setDate(nextD.getDate() + 1);
                 const nextDateStr = formatDateYMD(nextD);
@@ -203,21 +216,119 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ---- 5. Global Event Listeners ----
+    // ---- 5. Routine Management ----
+    function renderRoutines() {
+        const label = document.getElementById('routine-category-label');
+        label.textContent = currentCategory === 'work' ? '(💼 仕事)' : '(🏠 プライベート)';
+        
+        const list = document.getElementById('routine-list');
+        list.innerHTML = '';
+        const routines = store[currentCategory].routines || [];
+        
+        if (routines.length === 0) {
+            list.innerHTML = '<li class="empty-msg">登録されているルーティンはありません。</li>';
+            return;
+        }
+
+        routines.forEach(r => {
+            const li = document.createElement('li');
+            li.className = 'routine-list-item';
+            
+            let ruleText = '';
+            if (r.type === 'daily') ruleText = '毎日';
+            if (r.type === 'weekly') ruleText = `毎週 ${dayNames[r.value]}曜日`;
+            if (r.type === 'monthly') ruleText = `毎月 ${r.value}日`;
+            if (r.type === 'nth-weekday') ruleText = `第${r.value.week} ${dayNames[r.value.day]}曜日`;
+
+            li.innerHTML = `
+                <div class="routine-info">
+                    <span class="routine-name">${escapeHTML(r.text)}</span>
+                    <span class="routine-rule">${ruleText}</span>
+                </div>
+                <button class="delete-btn" data-routine-id="${r.id}" aria-label="削除">×</button>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    function injectRoutines(dateStr) {
+        const targetDate = new Date(dateStr);
+        const catData = store[currentCategory];
+        const routines = catData.routines || [];
+        if (!catData.tasksByDate[dateStr]) catData.tasksByDate[dateStr] = [];
+        
+        const currentTasks = catData.tasksByDate[dateStr];
+        
+        routines.forEach(r => {
+            let match = false;
+            if (r.type === 'daily') match = true;
+            if (r.type === 'weekly' && targetDate.getDay() == r.value) match = true;
+            if (r.type === 'monthly' && targetDate.getDate() == r.value) match = true;
+            if (r.type === 'nth-weekday') {
+              if (isNthWeekday(targetDate, r.value.week, r.value.day)) match = true;
+            }
+
+            if (match) {
+                // Check if task with same text already exists for this day
+                const exists = currentTasks.some(t => t.text === r.text);
+                if (!exists && currentTasks.length < 6) {
+                    currentTasks.push({ id: generateId(), text: r.text, completed: false, isRoutine: true });
+                }
+            }
+        });
+    }
+
+    function isNthWeekday(date, n, weekday) {
+        if (date.getDay() != weekday) return false;
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        let count = 0;
+        for (let d = 1; d <= 31; d++) {
+            const check = new Date(date.getFullYear(), date.getMonth(), d);
+            if (check.getMonth() !== date.getMonth()) break;
+            if (check.getDay() == weekday) {
+                count++;
+                if (d === date.getDate()) return count == n;
+            }
+        }
+        return false;
+    }
+
+    // ---- 6. Global Event Listeners ----
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('add-task-btn')) {
             addTask(e.target.getAttribute('data-date'));
         }
         if (e.target.classList.contains('delete-btn')) {
-            deleteTask(e.target.getAttribute('data-date'), e.target.getAttribute('data-id'));
-        }
-        if (e.target.classList.contains('carry-over-btn')) {
-            carryOverTasks(e.target.getAttribute('data-date'), e.target.getAttribute('data-next'));
+            const rid = e.target.getAttribute('data-routine-id');
+            if (rid) {
+                store[currentCategory].routines = store[currentCategory].routines.filter(r => r.id !== rid);
+                saveStore();
+                renderRoutines();
+                renderWeek();
+            } else {
+                deleteTask(e.target.getAttribute('data-date'), e.target.getAttribute('data-id'));
+            }
         }
         
+        if (e.target.classList.contains('move-btn')) {
+            const action = e.target.getAttribute('data-action');
+            const date = e.target.getAttribute('data-date');
+            const id = e.target.getAttribute('data-id');
+            moveTask(date, id, action);
+        }
+
         if (e.target.id === 'show-history-btn') {
             renderHistory();
             document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        if (e.target.id === 'show-routines-btn') {
+            renderRoutines();
+            document.getElementById('routine-modal').classList.remove('hidden');
+        }
+
+        if (e.target.id === 'add-routine-btn') {
+            addRoutine();
         }
 
         if (e.target.id === 'toggle-compact-btn') {
@@ -251,6 +362,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    const routineType = document.getElementById('routine-type');
+    if (routineType) {
+        routineType.addEventListener('change', (e) => {
+            const val = e.target.value;
+            document.getElementById('routine-value-weekly').classList.toggle('hidden', val !== 'weekly');
+            document.getElementById('routine-value-monthly').classList.toggle('hidden', val !== 'monthly');
+            document.getElementById('routine-value-nth').classList.toggle('hidden', val !== 'nth-weekday');
+        });
+        // Populate monthly options
+        const monthlySelect = document.getElementById('routine-value-monthly');
+        for (let d = 1; d <= 31; d++) {
+            const opt = document.createElement('option');
+            opt.value = d; opt.textContent = `${d}日`;
+            monthlySelect.appendChild(opt);
+        }
+    }
 
     document.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.id.startsWith('input-')) {
@@ -306,6 +434,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const catData = store[currentCategory];
         catData.tasksByDate[dateStr] = catData.tasksByDate[dateStr].filter(t => t.id !== id);
         saveStore();
+        renderWeek();
+    }
+
+    function moveTask(dateStr, id, action) {
+        const tasks = store[currentCategory].tasksByDate[dateStr];
+        const index = tasks.findIndex(t => t.id === id);
+        if (index === -1) return;
+        
+        if (action === 'up' && index > 0) {
+            [tasks[index], tasks[index - 1]] = [tasks[index - 1], tasks[index]];
+        } else if (action === 'down' && index < tasks.length - 1) {
+            [tasks[index], tasks[index + 1]] = [tasks[index + 1], tasks[index]];
+        }
+        saveStore();
+        renderWeek();
+    }
+
+    function addRoutine() {
+        const textInput = document.getElementById('routine-text-input');
+        const text = textInput.value.trim();
+        if (!text) return;
+        
+        const type = document.getElementById('routine-type').value;
+        let value = null;
+        
+        if (type === 'weekly') value = document.getElementById('routine-value-weekly').value;
+        if (type === 'monthly') value = document.getElementById('routine-value-monthly').value;
+        if (type === 'nth-weekday') {
+            value = {
+                week: document.getElementById('routine-nth-week').value,
+                day: document.getElementById('routine-nth-day').value
+            };
+        }
+        
+        const newRoutine = { id: generateId(), text, type, value };
+        store[currentCategory].routines.push(newRoutine);
+        saveStore();
+        
+        textInput.value = '';
+        renderRoutines();
         renderWeek();
     }
 
