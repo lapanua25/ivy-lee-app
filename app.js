@@ -1,11 +1,31 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ---- 0. Firebase Initialization ----
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-tZ77oTb6Wh4VowihOe00u5qLURiyRIw",
+      authDomain: "ivy-lee-method-2f615.firebaseapp.com",
+      projectId: "ivy-lee-method-2f615",
+      storageBucket: "ivy-lee-method-2f615.firebasestorage.app",
+      messagingSenderId: "93433529823",
+      appId: "1:93433529823:web:535030e3e9a7f84f0ff06a",
+      measurementId: "G-YJ2370GXS4"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUser = null;
+    let useFirestore = false;
+
     // ---- 1. Data Store Initialization & Migration ----
     let rawStore = localStorage.getItem('ivyLeeData');
     let store = rawStore ? JSON.parse(rawStore) : null;
     let currentCategory = localStorage.getItem('ivyLeeCategory') || 'private';
     
     // Theme logic
+    const validThemes = ['light', 'dark'];
     let currentTheme = localStorage.getItem('ivyLeeTheme') || 'dark';
+    if (!validThemes.includes(currentTheme)) currentTheme = 'dark';
     document.body.setAttribute('data-theme', currentTheme);
     const themeSelector = document.getElementById('theme-selector');
     if (themeSelector) themeSelector.value = currentTheme;
@@ -18,15 +38,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Tools
     function generateId() { return Math.random().toString(36).substr(2, 9); }
-    function saveStore() { localStorage.setItem('ivyLeeData', JSON.stringify(store)); }
     function formatDateYMD(d) {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function saveStore() {
+        // Always save to localStorage
+        localStorage.setItem('ivyLeeData', JSON.stringify(store));
+
+        // If logged in, also save to Firestore
+        if (useFirestore && currentUser) {
+            db.collection('users').doc(currentUser.uid).set({
+                data: store,
+                lastUpdated: new Date().toISOString()
+            }).catch(error => {
+                console.error('Firestore save error:', error);
+            });
+        }
+    }
+
+    async function loadDataFromFirestore() {
+        if (!currentUser) return;
+
+        try {
+            const doc = await db.collection('users').doc(currentUser.uid).get();
+            if (doc.exists) {
+                // Load from Firestore
+                store = doc.data().data;
+                console.log('Data loaded from Firestore');
+            } else {
+                // First-time user - migrate LocalStorage data to Firestore
+                await db.collection('users').doc(currentUser.uid).set({
+                    data: store,
+                    lastUpdated: new Date().toISOString()
+                });
+                console.log('New user - initial data saved to Firestore');
+            }
+            switchCategory(currentCategory, true);
+        } catch (error) {
+            console.error('Firestore load error:', error);
+            // Fallback to LocalStorage on error
+            switchCategory(currentCategory, true);
+        }
     }
 
     const today = new Date();
     today.setHours(0,0,0,0);
     const todayYMD = formatDateYMD(today);
     let currentStartDate = new Date(today);
+
+    // Get all existing dates from data
+    function getAllDates() {
+        const catData = store[currentCategory];
+        const dates = Object.keys(catData.tasksByDate || {}).sort();
+        return dates;
+    }
+
+    // Get min and max dates
+    function getDateRange() {
+        const dates = getAllDates();
+        if (dates.length === 0) {
+            const minDate = new Date(today);
+            minDate.setDate(minDate.getDate() - 365);
+            return { min: formatDateYMD(minDate), max: formatDateYMD(today) };
+        }
+        return { min: dates[0], max: dates[dates.length - 1] };
+    }
 
     // Initial Migration logic
     if (!store || (!store.work && !store.private)) {
@@ -84,97 +161,260 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ---- 3. Render UI (Weekly View) ----
+    // ---- 2.5. Firebase Authentication ----
+    const googleLoginBtn = document.getElementById('google-login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const userInfo = document.getElementById('user-info');
+    const userEmail = document.getElementById('user-email');
+
+    googleLoginBtn.addEventListener('click', () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider)
+            .then(() => {
+                console.log('Google ログイン成功');
+            })
+            .catch((error) => {
+                console.error('ログインエラー:', error);
+                alert('ログインに失敗しました: ' + error.message);
+            });
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        auth.signOut()
+            .then(() => {
+                console.log('ログアウト成功');
+                useFirestore = false;
+                // Restore from LocalStorage
+                rawStore = localStorage.getItem('ivyLeeData');
+                store = rawStore ? JSON.parse(rawStore) : null;
+                switchCategory(currentCategory, true);
+            })
+            .catch((error) => {
+                console.error('ログアウトエラー:', error);
+            });
+    });
+
+    // 認証状態の監視
+    auth.onAuthStateChanged((user) => {
+        currentUser = user;
+        if (user) {
+            // ログイン状態
+            googleLoginBtn.style.display = 'none';
+            userInfo.style.display = 'flex';
+            userEmail.textContent = user.email;
+            useFirestore = true;
+            loadDataFromFirestore();
+        } else {
+            // ログアウト状態
+            googleLoginBtn.style.display = 'block';
+            userInfo.style.display = 'none';
+            useFirestore = false;
+            // LocalStorage からデータ読み込み
+            switchCategory(currentCategory, true);
+        }
+    });
+
+    // ---- 3. Render UI (Weekly View with Scroll) ----
     const weekContainer = document.getElementById('week-container');
+    const weekContainerWrapper = document.getElementById('week-container-wrapper');
     const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-    
+    let isScrolling = false;
+    let scrollTimeout = null;
+
+    function getWeekStart(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        d.setDate(d.getDate() - day);
+        d.setHours(0,0,0,0);
+        return d;
+    }
+
     function renderWeek() {
         weekContainer.innerHTML = '';
         const catData = store[currentCategory];
+        const range = getDateRange();
 
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(currentStartDate);
-            d.setDate(d.getDate() + i);
-            const dateStr = formatDateYMD(d);
-            const isToday = dateStr === todayYMD;
-            const title = isToday ? `今日 ${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})` 
-                          : `${d.getMonth()+1}/${d.getDate()}(${dayNames[d.getDay()]})`;
+        // Calculate which weeks to render (current week ± surrounding weeks for scrolling)
+        const weekStart = getWeekStart(currentStartDate);
+        const minDate = new Date(range.min);
+        const maxDate = new Date(range.max);
+        maxDate.setDate(maxDate.getDate() + 6); // Include full last week
 
-            const tasks = catData.tasksByDate[dateStr] || [];
-            
-            // Auto-inject routines if space is available
-            if (tasks.length < 6) { injectRoutines(dateStr); }
-            const currentTasks = catData.tasksByDate[dateStr] || [];
+        let d = new Date(minDate);
+        d = getWeekStart(d);
 
-            const card = document.createElement('div');
-            card.className = `day-card ${isToday ? 'today-card' : ''}`;
-            
-            const disabledAttr = currentTasks.length >= 6 ? 'disabled' : '';
-            const placeholder = currentTasks.length >= 6 ? '最大6つまで設定可能' : '新しいタスクを追加...';
-            
-            let html = `
-                <div class="card-header">
-                    <h2>${title}</h2>
-                </div>
-                <div class="task-input-section">
-                    <input type="text" id="input-${dateStr}" placeholder="${placeholder}" ${disabledAttr}>
-                    <button class="add-task-btn" data-date="${dateStr}" ${disabledAttr}>追加</button>
-                </div>
-                <ul class="task-list" id="list-${dateStr}">
-            `;
-            
-            for (let j = 0; j < 6; j++) {
-                const task = currentTasks[j];
-                if (task) {
-                    html += `
-                        <li class="task-item ${task.completed ? 'completed' : ''}">
-                            <div class="rank">${j + 1}</div>
-                            <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} data-date="${dateStr}" data-id="${task.id}">
-                            <span class="task-text">${escapeHTML(task.text)}</span>
-                            <div class="task-actions">
-                                <button class="move-btn" data-action="up" data-date="${dateStr}" data-id="${task.id}" ${j===0 ? 'disabled' : ''}>▲</button>
-                                <button class="move-btn" data-action="down" data-date="${dateStr}" data-id="${task.id}" ${j===currentTasks.length-1 ? 'disabled' : ''}>▼</button>
+        // Render all weeks from min to max date
+        while (d < maxDate) {
+            for (let i = 0; i < 7; i++) {
+                const dayDate = new Date(d);
+                dayDate.setDate(dayDate.getDate() + i);
+                const dateStr = formatDateYMD(dayDate);
+                const isToday = dateStr === todayYMD;
+                const title = isToday ? `今日 ${dayDate.getMonth()+1}/${dayDate.getDate()}(${dayNames[dayDate.getDay()]})`
+                              : `${dayDate.getMonth()+1}/${dayDate.getDate()}(${dayNames[dayDate.getDay()]})`;
+
+                const tasks = catData.tasksByDate[dateStr] || [];
+
+                // Auto-inject routines if space is available
+                if (tasks.length < 6) { injectRoutines(dateStr); }
+                const currentTasks = catData.tasksByDate[dateStr] || [];
+
+                const card = document.createElement('div');
+                card.className = `day-card ${isToday ? 'today-card' : ''}`;
+                card.id = `card-${dateStr}`;
+
+                const disabledAttr = currentTasks.length >= 6 ? 'disabled' : '';
+                const placeholder = currentTasks.length >= 6 ? '最大6つまで設定可能' : '新しいタスクを追加...';
+
+                let html = `
+                    <div class="card-header">
+                        <h2>${title}</h2>
+                    </div>
+                    <div class="task-input-section">
+                        <input type="text" id="input-${dateStr}" placeholder="${placeholder}" ${disabledAttr}>
+                        <button class="add-task-btn" data-date="${dateStr}" ${disabledAttr}>追加</button>
+                    </div>
+                    <ul class="task-list" id="list-${dateStr}">
+                `;
+
+                for (let j = 0; j < 6; j++) {
+                    const task = currentTasks[j];
+                    if (task) {
+                        html += `
+                            <li class="task-item ${task.completed ? 'completed' : ''}" data-date="${dateStr}" data-id="${task.id}">
+                                <div class="rank">${j + 1}</div>
+                                <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} data-date="${dateStr}" data-id="${task.id}">
+                                <span class="task-text">${escapeHTML(task.text)}</span>
                                 <button class="delete-btn" aria-label="削除" data-date="${dateStr}" data-id="${task.id}">×</button>
-                            </div>
-                        </li>
-                    `;
-                } else {
-                    html += `
-                        <li class="task-item empty">
-                            <div class="rank empty-rank">${j + 1}</div>
-                            <span class="task-text empty-text">未設定</span>
-                        </li>
-                    `;
+                                <div class="drag-handle" data-date="${dateStr}" data-id="${task.id}" title="ドラッグして並び替え">⠿</div>
+                            </li>
+                        `;
+                    } else {
+                        html += `
+                            <li class="task-item empty">
+                                <div class="rank empty-rank">${j + 1}</div>
+                                <span class="task-text empty-text">未設定</span>
+                            </li>
+                        `;
+                    }
                 }
-            }
-            html += `</ul>`;
-            
-            const allCompleted = currentTasks.length > 0 && currentTasks.every(t => t.completed);
-            
-            if (currentTasks.some(t => !t.completed) || currentTasks.length === 0) {
-                const nextD = new Date(d);
-                nextD.setDate(nextD.getDate() + 1);
-                const nextDateStr = formatDateYMD(nextD);
-                
-                html += `
-                <div class="actions-section">
-                    <button class="carry-over-btn" data-date="${dateStr}" data-next="${nextDateStr}">
-                        未完了を翌日へ繰り越す
-                    </button>
-                </div>`;
-            } else if (allCompleted) {
-                html += `
-                <div class="actions-section">
-                    <div class="all-done-msg">🎊 すべて完了しました！</div>
-                </div>`;
-            }
+                html += `</ul>`;
 
-            card.innerHTML = html;
-            weekContainer.appendChild(card);
+                const allCompleted = currentTasks.length > 0 && currentTasks.every(t => t.completed);
+
+                if (currentTasks.some(t => !t.completed) || currentTasks.length === 0) {
+                    const nextD = new Date(dayDate);
+                    nextD.setDate(nextD.getDate() + 1);
+                    const nextDateStr = formatDateYMD(nextD);
+
+                    html += `
+                    <div class="actions-section">
+                        <button class="carry-over-btn" data-date="${dateStr}" data-next="${nextDateStr}">
+                            未完了を翌日へ繰り越す
+                        </button>
+                    </div>`;
+                } else if (allCompleted) {
+                    html += `
+                    <div class="actions-section">
+                        <div class="all-done-msg">🎊 すべて完了しました！</div>
+                    </div>`;
+                }
+
+                card.innerHTML = html;
+                weekContainer.appendChild(card);
+            }
+            d.setDate(d.getDate() + 7);
+        }
+
+        // スクロール位置を今週にセット
+        setTimeout(() => {
+            const todayCard = document.getElementById(`card-${todayYMD}`);
+            if (todayCard) {
+                todayCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 50);
+    }
+
+    // ---- 4. Drag-to-reorder ----
+    // タッチ＆マウス両対応のドラッグ並び替え
+    let dragState = null;
+
+    function getDragHandleFromEvent(e) {
+        return e.target.closest('.drag-handle');
+    }
+
+    function getTaskItemFromHandle(handle) {
+        return handle.closest('.task-item');
+    }
+
+    function onDragStart(e) {
+        const handle = getDragHandleFromEvent(e);
+        if (!handle) return;
+        const item = getTaskItemFromHandle(handle);
+        if (!item) return;
+
+        const dateStr = handle.getAttribute('data-date');
+        const id = handle.getAttribute('data-id');
+        const list = item.closest('.task-list');
+        const items = Array.from(list.querySelectorAll('.task-item:not(.empty)'));
+        const startIndex = items.indexOf(item);
+
+        const startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+        const itemHeight = item.getBoundingClientRect().height;
+
+        item.classList.add('dragging');
+
+        dragState = { dateStr, id, item, list, items, startIndex, startY, itemHeight, currentIndex: startIndex };
+
+        if (e.type === 'touchstart') {
+            e.preventDefault();
         }
     }
 
-    // ---- 4. Render History Modal ----
+    function onDragMove(e) {
+        if (!dragState) return;
+        const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+        const dy = clientY - dragState.startY;
+        const steps = Math.round(dy / (dragState.itemHeight + 8)); // 8 = gap
+        const newIndex = Math.max(0, Math.min(dragState.items.length - 1, dragState.startIndex + steps));
+
+        if (newIndex !== dragState.currentIndex) {
+            dragState.currentIndex = newIndex;
+            // Reorder DOM for visual feedback
+            const items = Array.from(dragState.list.querySelectorAll('.task-item:not(.empty)'));
+            dragState.list.insertBefore(dragState.item,
+                newIndex >= items.length ? null : (newIndex > items.indexOf(dragState.item) ? items[newIndex].nextSibling : items[newIndex])
+            );
+        }
+        if (e.type === 'touchmove') e.preventDefault();
+    }
+
+    function onDragEnd() {
+        if (!dragState) return;
+        dragState.item.classList.remove('dragging');
+
+        if (dragState.currentIndex !== dragState.startIndex) {
+            const tasks = store[currentCategory].tasksByDate[dragState.dateStr];
+            const fromIdx = tasks.findIndex(t => t.id === dragState.id);
+            const toIdx = dragState.currentIndex;
+            if (fromIdx !== -1 && fromIdx !== toIdx) {
+                const [moved] = tasks.splice(fromIdx, 1);
+                tasks.splice(toIdx, 0, moved);
+                saveStore();
+                renderWeek();
+            }
+        }
+        dragState = null;
+    }
+
+    weekContainer.addEventListener('mousedown', onDragStart);
+    weekContainer.addEventListener('touchstart', onDragStart, { passive: false });
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('mouseup', onDragEnd);
+    document.addEventListener('touchend', onDragEnd);
+
+    // ---- 5. Render History Modal ----
     function renderHistory() {
         // Label indicating which history is being shown
         const label = document.getElementById('history-category-label');
@@ -216,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ---- 5. Routine Management ----
+    // ---- 6. Routine Management ----
     function renderRoutines() {
         const label = document.getElementById('routine-category-label');
         label.textContent = currentCategory === 'work' ? '(💼 仕事)' : '(🏠 プライベート)';
@@ -310,11 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        if (e.target.classList.contains('move-btn')) {
-            const action = e.target.getAttribute('data-action');
-            const date = e.target.getAttribute('data-date');
-            const id = e.target.getAttribute('data-id');
-            moveTask(date, id, action);
+        if (e.target.classList.contains('carry-over-btn')) {
+            const currentDate = e.target.getAttribute('data-date');
+            const nextDate = e.target.getAttribute('data-next');
+            carryOverTasks(currentDate, nextDate);
         }
 
         if (e.target.id === 'show-history-btn') {
@@ -331,10 +570,6 @@ document.addEventListener('DOMContentLoaded', () => {
             addRoutine();
         }
 
-        if (e.target.id === 'toggle-compact-btn') {
-            document.body.classList.toggle('compact-view');
-        }
-        
         if (e.target.id === 'prev-week-btn') {
              currentStartDate.setDate(currentStartDate.getDate() - 7);
              renderWeek();
@@ -360,6 +595,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 saveStore();
                 renderHistory();
             }
+        }
+
+        if (e.target.id === 'export-data-btn') {
+            exportData();
+        }
+
+        if (e.target.id === 'import-data-btn') {
+            document.getElementById('import-file-input').click();
+        }
+    });
+
+    document.getElementById('import-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            importData(file);
+            e.target.value = ''; // reset file input
         }
     });
 
@@ -513,10 +764,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const escapeHTML = (str) => {
-        return str.replace(/[&<>'"]/g, 
+        return str.replace(/[&<>'"]/g,
             tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
         );
     };
+
+    // ---- 7. Data Export/Import ----
+    function exportData() {
+        const dataStr = JSON.stringify(store, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ivy-lee-backup-${formatDateYMD(new Date())}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function importData(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (!importedData.work || !importedData.private) {
+                    alert('❌ ファイルフォーマットが不正です。正しいバックアップファイルを選択してください。');
+                    return;
+                }
+                if (confirm('⚠️ 現在のデータをインポートしたファイルで完全に上書きします。よろしいですか？')) {
+                    store = importedData;
+                    saveStore();
+                    alert('✅ データをインポートしました。ページをリロードします。');
+                    location.reload();
+                }
+            } catch (error) {
+                alert('❌ ファイル読み込みエラー: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+    }
 
     // INIT
     switchCategory(currentCategory, true);
