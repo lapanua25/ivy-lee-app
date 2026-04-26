@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Read(//g/マイドライブ/07.趣味/7_PC/**)",
+      "Bash(find . -type d -name \"terra-nova*\")",
+      "Bash(gh repo *)",
+      "Bash(curl -s https://api.github.com/repos/lapanua25/terra-nova-botanical)",
+      "Bash(curl -s https://api.github.com/users/lapanua25/repos)",
+      "Bash(curl -s \"https://api.github.com/repos/lapanua25/terra-nova-botanica/contents/\")",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__read_console_messages",
+      "mcp__Claude_in_Chrome__read_network_requests",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(node -c app.js)",
+      "Bash(node -p \"require\\('fs'\\).readFileSync\\('app.js', 'utf8'\\).split\\('\\\\n'\\).slice\\(0, 100\\).join\\('\\\\n'\\)\")",
+      "mcp__Claude_in_Chrome__get_page_text",
+      "mcp__Claude_in_Chrome__read_page",
+      "Bash(timeout 2 curl -s http://localhost:8080/)",
+      "mcp__Claude_in_Chrome__tabs_close_mcp"
+    ]
+  }
+}

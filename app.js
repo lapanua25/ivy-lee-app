@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
     // ---- 0. Firebase Initialization ----
     const firebaseConfig = {
       apiKey: "AIzaSyC-tZ77oTb6Wh4VowihOe00u5qLURiyRIw",
@@ -10,9 +10,21 @@ document.addEventListener('DOMContentLoaded', () => {
       measurementId: "G-YJ2370GXS4"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    // Check if Firebase SDK is loaded
+    if (typeof firebase === 'undefined') {
+      console.warn('Firebase SDK not loaded. Multi-device sync disabled - using local storage only.');
+    }
+
+    let auth = null;
+    let db = null;
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
+    }
 
     let currentUser = null;
     let useFirestore = false;
@@ -28,13 +40,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!validThemes.includes(currentTheme)) currentTheme = 'dark';
     document.body.setAttribute('data-theme', currentTheme);
     const themeSelector = document.getElementById('theme-selector');
-    if (themeSelector) themeSelector.value = currentTheme;
-
-    themeSelector.addEventListener('change', (e) => {
-        currentTheme = e.target.value;
-        document.body.setAttribute('data-theme', currentTheme);
-        localStorage.setItem('ivyLeeTheme', currentTheme);
-    });
+    if (themeSelector) {
+        themeSelector.value = currentTheme;
+        themeSelector.addEventListener('change', (e) => {
+            currentTheme = e.target.value;
+            document.body.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('ivyLeeTheme', currentTheme);
+        });
+    }
 
     // Tools
     function generateId() { return Math.random().toString(36).substr(2, 9); }
@@ -47,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('ivyLeeData', JSON.stringify(store));
 
         // If logged in, also save to Firestore
-        if (useFirestore && currentUser) {
+        if (useFirestore && currentUser && db) {
             db.collection('users').doc(currentUser.uid).set({
                 data: store,
                 lastUpdated: new Date().toISOString()
@@ -58,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadDataFromFirestore() {
-        if (!currentUser) return;
+        if (!currentUser || !db) return;
 
         try {
             const doc = await db.collection('users').doc(currentUser.uid).get();
@@ -167,52 +180,62 @@ document.addEventListener('DOMContentLoaded', () => {
     const userInfo = document.getElementById('user-info');
     const userEmail = document.getElementById('user-email');
 
-    googleLoginBtn.addEventListener('click', () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        auth.signInWithPopup(provider)
-            .then(() => {
-                console.log('Google ログイン成功');
-            })
-            .catch((error) => {
-                console.error('ログインエラー:', error);
-                alert('ログインに失敗しました: ' + error.message);
-            });
-    });
+    if (auth) {
+        googleLoginBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then(() => {
+                    console.log('Google ログイン成功');
+                })
+                .catch((error) => {
+                    console.error('ログインエラー:', error);
+                    alert('ログインに失敗しました: ' + error.message);
+                });
+        });
 
-    logoutBtn.addEventListener('click', () => {
-        auth.signOut()
-            .then(() => {
-                console.log('ログアウト成功');
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut()
+                .then(() => {
+                    console.log('ログアウト成功');
+                    useFirestore = false;
+                    // Restore from LocalStorage
+                    rawStore = localStorage.getItem('ivyLeeData');
+                    store = rawStore ? JSON.parse(rawStore) : null;
+                    switchCategory(currentCategory, true);
+                })
+                .catch((error) => {
+                    console.error('ログアウトエラー:', error);
+                });
+        });
+
+        // 認証状態の監視
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            if (user) {
+                // ログイン状態
+                googleLoginBtn.style.display = 'none';
+                userInfo.style.display = 'flex';
+                userEmail.textContent = user.email;
+                useFirestore = true;
+                loadDataFromFirestore();
+            } else {
+                // ログアウト状態
+                googleLoginBtn.style.display = 'block';
+                userInfo.style.display = 'none';
                 useFirestore = false;
-                // Restore from LocalStorage
-                rawStore = localStorage.getItem('ivyLeeData');
-                store = rawStore ? JSON.parse(rawStore) : null;
+                // LocalStorage からデータ読み込み
                 switchCategory(currentCategory, true);
-            })
-            .catch((error) => {
-                console.error('ログアウトエラー:', error);
-            });
-    });
-
-    // 認証状態の監視
-    auth.onAuthStateChanged((user) => {
-        currentUser = user;
-        if (user) {
-            // ログイン状態
-            googleLoginBtn.style.display = 'none';
-            userInfo.style.display = 'flex';
-            userEmail.textContent = user.email;
-            useFirestore = true;
-            loadDataFromFirestore();
-        } else {
-            // ログアウト状態
-            googleLoginBtn.style.display = 'block';
-            userInfo.style.display = 'none';
-            useFirestore = false;
-            // LocalStorage からデータ読み込み
-            switchCategory(currentCategory, true);
-        }
-    });
+            }
+        });
+    } else {
+        // Firebase not available - show login button but keep it disabled/hidden
+        // Default to showing local storage mode
+        console.warn('Firebase not available - using local storage only');
+        googleLoginBtn.style.display = 'none';
+        userInfo.style.display = 'none';
+        useFirestore = false;
+        switchCategory(currentCategory, true);
+    }
 
     // ---- 3. Render UI (Weekly View with Scroll) ----
     const weekContainer = document.getElementById('week-container');
@@ -805,4 +828,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // INIT
     switchCategory(currentCategory, true);
-});
+}
+
+// Call initApp when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    // DOM is already loaded
+    initApp();
+}
