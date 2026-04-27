@@ -174,6 +174,11 @@ function initApp() {
         });
     });
 
+    // ---- 3. Render UI 変数（authブロックより前に宣言が必要）----
+    const weekContainer = document.getElementById('week-container');
+    const weekContainerWrapper = document.getElementById('week-container-wrapper');
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
     // ---- 2.5. Firebase Authentication ----
     const googleLoginBtn = document.getElementById('google-login-btn');
     const logoutBtn = document.getElementById('logout-btn');
@@ -238,9 +243,6 @@ function initApp() {
     }
 
     // ---- 3. Render UI (Weekly View with Scroll) ----
-    const weekContainer = document.getElementById('week-container');
-    const weekContainerWrapper = document.getElementById('week-container-wrapper');
-    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
     let isScrolling = false;
     let scrollTimeout = null;
 
@@ -303,11 +305,16 @@ function initApp() {
                 for (let j = 0; j < 6; j++) {
                     const task = currentTasks[j];
                     if (task) {
+                        const carriedOverClass = task.carriedOver ? 'carried-over' : '';
+                        const carriedBadge = task.carriedOver
+                            ? `<span class="carried-badge">翌日へ→</span>` : '';
+                        const carriedFromBadge = task.carriedFrom
+                            ? `<span class="carried-from-badge">← 繰越</span>` : '';
                         html += `
-                            <li class="task-item ${task.completed ? 'completed' : ''}" data-date="${dateStr}" data-id="${task.id}">
+                            <li class="task-item ${task.completed ? 'completed' : ''} ${carriedOverClass}" data-date="${dateStr}" data-id="${task.id}">
                                 <div class="rank">${j + 1}</div>
                                 <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} data-date="${dateStr}" data-id="${task.id}">
-                                <span class="task-text">${escapeHTML(task.text)}</span>
+                                <span class="task-text">${escapeHTML(task.text)}${carriedBadge}${carriedFromBadge}</span>
                                 <button class="delete-btn" aria-label="削除" data-date="${dateStr}" data-id="${task.id}">×</button>
                                 <div class="drag-handle" data-date="${dateStr}" data-id="${task.id}" title="ドラッグして並び替え">⠿</div>
                             </li>
@@ -349,11 +356,13 @@ function initApp() {
             d.setDate(d.getDate() + 7);
         }
 
-        // スクロール位置を今週にセット
+        // スクロール位置を今日にセット（ヘッダー分を考慮）
         setTimeout(() => {
             const todayCard = document.getElementById(`card-${todayYMD}`);
-            if (todayCard) {
-                todayCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const wrapper = document.getElementById('week-container-wrapper');
+            if (todayCard && wrapper) {
+                const cardOffsetTop = todayCard.offsetTop;
+                wrapper.scrollTo({ top: cardOffsetTop - 20, behavior: 'smooth' });
             }
         }, 50);
     }
@@ -754,32 +763,37 @@ function initApp() {
     function carryOverTasks(currentDate, nextDate) {
         const catData = store[currentCategory];
         const currentTasks = catData.tasksByDate[currentDate] || [];
-        const incompleteTasks = currentTasks.filter(t => !t.completed);
-        const completedTasks = currentTasks.filter(t => t.completed);
-        
+        // まだ持ち越していない未完了タスクだけ対象
+        const incompleteTasks = currentTasks.filter(t => !t.completed && !t.carriedOver);
+
         if (incompleteTasks.length === 0) return;
-        
+
         if (!catData.tasksByDate[nextDate]) catData.tasksByDate[nextDate] = [];
-        
+
         let carriedCount = 0;
         incompleteTasks.forEach(task => {
             if (catData.tasksByDate[nextDate].length < 6) {
-                catData.tasksByDate[nextDate].push(task);
+                // 翌日に新しいIDでコピー（どこから来たか記録）
+                catData.tasksByDate[nextDate].push({
+                    ...task,
+                    id: generateId(),
+                    carriedFrom: currentDate,
+                    carriedOver: false
+                });
+                // 元のタスクに「翌日へ持ち越し済み」フラグ
+                task.carriedOver = true;
                 carriedCount++;
             }
         });
-        
+
         if (carriedCount === 0) {
-            alert('翌日のタスクリストがすでに6つ埋まっているため、一部のタスクを繰り越しできません。');
+            alert('翌日のタスクリストがすでに6つ埋まっているため、繰り越しできません。');
             return;
         }
 
-        const remainingIncomplete = incompleteTasks.slice(carriedCount);
-        catData.tasksByDate[currentDate] = [...completedTasks, ...remainingIncomplete];
-        
         saveStore();
         renderWeek();
-        
+
         // Flash animation
         document.body.style.transition = "opacity 0.2s";
         document.body.style.opacity = "0.7";
