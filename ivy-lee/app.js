@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
     // ---- 0. Firebase Initialization ----
     const firebaseConfig = {
       apiKey: "AIzaSyC-tZ77oTb6Wh4VowihOe00u5qLURiyRIw",
@@ -10,9 +10,21 @@ document.addEventListener('DOMContentLoaded', () => {
       measurementId: "G-YJ2370GXS4"
     };
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
+    // Check if Firebase SDK is loaded
+    if (typeof firebase === 'undefined') {
+      console.warn('Firebase SDK not loaded. Multi-device sync disabled - using local storage only.');
+    }
+
+    let auth = null;
+    let db = null;
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+    } catch (error) {
+      console.error('Firebase initialization error:', error);
+    }
 
     let currentUser = null;
     let useFirestore = false;
@@ -28,13 +40,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!validThemes.includes(currentTheme)) currentTheme = 'dark';
     document.body.setAttribute('data-theme', currentTheme);
     const themeSelector = document.getElementById('theme-selector');
-    if (themeSelector) themeSelector.value = currentTheme;
-
-    themeSelector.addEventListener('change', (e) => {
-        currentTheme = e.target.value;
-        document.body.setAttribute('data-theme', currentTheme);
-        localStorage.setItem('ivyLeeTheme', currentTheme);
-    });
+    if (themeSelector) {
+        themeSelector.value = currentTheme;
+        themeSelector.addEventListener('change', (e) => {
+            currentTheme = e.target.value;
+            document.body.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('ivyLeeTheme', currentTheme);
+        });
+    }
 
     // Tools
     function generateId() { return Math.random().toString(36).substr(2, 9); }
@@ -47,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('ivyLeeData', JSON.stringify(store));
 
         // If logged in, also save to Firestore
-        if (useFirestore && currentUser) {
+        if (useFirestore && currentUser && db) {
             db.collection('users').doc(currentUser.uid).set({
                 data: store,
                 lastUpdated: new Date().toISOString()
@@ -58,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadDataFromFirestore() {
-        if (!currentUser) return;
+        if (!currentUser || !db) return;
 
         try {
             const doc = await db.collection('users').doc(currentUser.uid).get();
@@ -161,63 +174,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // ---- 3. Render UI 変数（authブロックより前に宣言が必要）----
+    const weekContainer = document.getElementById('week-container');
+    const weekContainerWrapper = document.getElementById('week-container-wrapper');
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
     // ---- 2.5. Firebase Authentication ----
     const googleLoginBtn = document.getElementById('google-login-btn');
     const logoutBtn = document.getElementById('logout-btn');
     const userInfo = document.getElementById('user-info');
     const userEmail = document.getElementById('user-email');
 
-    googleLoginBtn.addEventListener('click', () => {
-        const provider = new firebase.auth.GoogleAuthProvider();
-        auth.signInWithPopup(provider)
-            .then(() => {
-                console.log('Google ログイン成功');
-            })
-            .catch((error) => {
-                console.error('ログインエラー:', error);
-                alert('ログインに失敗しました: ' + error.message);
-            });
-    });
+    if (auth) {
+        googleLoginBtn.addEventListener('click', () => {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then(() => {
+                    console.log('Google ログイン成功');
+                })
+                .catch((error) => {
+                    console.error('ログインエラー:', error);
+                    alert('ログインに失敗しました: ' + error.message);
+                });
+        });
 
-    logoutBtn.addEventListener('click', () => {
-        auth.signOut()
-            .then(() => {
-                console.log('ログアウト成功');
+        logoutBtn.addEventListener('click', () => {
+            auth.signOut()
+                .then(() => {
+                    console.log('ログアウト成功');
+                    useFirestore = false;
+                    // Restore from LocalStorage
+                    rawStore = localStorage.getItem('ivyLeeData');
+                    store = rawStore ? JSON.parse(rawStore) : null;
+                    switchCategory(currentCategory, true);
+                })
+                .catch((error) => {
+                    console.error('ログアウトエラー:', error);
+                });
+        });
+
+        // 認証状態の監視
+        auth.onAuthStateChanged((user) => {
+            currentUser = user;
+            if (user) {
+                // ログイン状態
+                googleLoginBtn.style.display = 'none';
+                userInfo.style.display = 'flex';
+                userEmail.textContent = user.email;
+                useFirestore = true;
+                loadDataFromFirestore();
+            } else {
+                // ログアウト状態
+                googleLoginBtn.style.display = 'block';
+                userInfo.style.display = 'none';
                 useFirestore = false;
-                // Restore from LocalStorage
-                rawStore = localStorage.getItem('ivyLeeData');
-                store = rawStore ? JSON.parse(rawStore) : null;
+                // LocalStorage からデータ読み込み
                 switchCategory(currentCategory, true);
-            })
-            .catch((error) => {
-                console.error('ログアウトエラー:', error);
-            });
-    });
-
-    // 認証状態の監視
-    auth.onAuthStateChanged((user) => {
-        currentUser = user;
-        if (user) {
-            // ログイン状態
-            googleLoginBtn.style.display = 'none';
-            userInfo.style.display = 'flex';
-            userEmail.textContent = user.email;
-            useFirestore = true;
-            loadDataFromFirestore();
-        } else {
-            // ログアウト状態
-            googleLoginBtn.style.display = 'block';
-            userInfo.style.display = 'none';
-            useFirestore = false;
-            // LocalStorage からデータ読み込み
-            switchCategory(currentCategory, true);
-        }
-    });
+            }
+        });
+    } else {
+        // Firebase not available - show login button but keep it disabled/hidden
+        // Default to showing local storage mode
+        console.warn('Firebase not available - using local storage only');
+        googleLoginBtn.style.display = 'none';
+        userInfo.style.display = 'none';
+        useFirestore = false;
+        switchCategory(currentCategory, true);
+    }
 
     // ---- 3. Render UI (Weekly View with Scroll) ----
-    const weekContainer = document.getElementById('week-container');
-    const weekContainerWrapper = document.getElementById('week-container-wrapper');
-    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
     let isScrolling = false;
     let scrollTimeout = null;
 
@@ -280,11 +305,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (let j = 0; j < 6; j++) {
                     const task = currentTasks[j];
                     if (task) {
+                        const carriedOverClass = task.carriedOver ? 'carried-over' : '';
+                        const carriedBadge = task.carriedOver
+                            ? `<span class="carried-badge">翌日へ→</span>` : '';
+                        const carriedFromBadge = task.carriedFrom
+                            ? `<span class="carried-from-badge">← 繰越</span>` : '';
                         html += `
-                            <li class="task-item ${task.completed ? 'completed' : ''}" data-date="${dateStr}" data-id="${task.id}">
+                            <li class="task-item ${task.completed ? 'completed' : ''} ${carriedOverClass}" data-date="${dateStr}" data-id="${task.id}">
                                 <div class="rank">${j + 1}</div>
                                 <input type="checkbox" class="checkbox" ${task.completed ? 'checked' : ''} data-date="${dateStr}" data-id="${task.id}">
-                                <span class="task-text">${escapeHTML(task.text)}</span>
+                                <span class="task-text">${escapeHTML(task.text)}${carriedBadge}${carriedFromBadge}</span>
                                 <button class="delete-btn" aria-label="削除" data-date="${dateStr}" data-id="${task.id}">×</button>
                                 <div class="drag-handle" data-date="${dateStr}" data-id="${task.id}" title="ドラッグして並び替え">⠿</div>
                             </li>
@@ -326,11 +356,13 @@ document.addEventListener('DOMContentLoaded', () => {
             d.setDate(d.getDate() + 7);
         }
 
-        // スクロール位置を今週にセット
+        // スクロール位置を今日にセット（ヘッダー分を考慮）
         setTimeout(() => {
             const todayCard = document.getElementById(`card-${todayYMD}`);
-            if (todayCard) {
-                todayCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const wrapper = document.getElementById('week-container-wrapper');
+            if (todayCard && wrapper) {
+                const cardOffsetTop = todayCard.offsetTop;
+                wrapper.scrollTo({ top: cardOffsetTop - 20, behavior: 'smooth' });
             }
         }, 50);
     }
@@ -731,32 +763,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function carryOverTasks(currentDate, nextDate) {
         const catData = store[currentCategory];
         const currentTasks = catData.tasksByDate[currentDate] || [];
-        const incompleteTasks = currentTasks.filter(t => !t.completed);
-        const completedTasks = currentTasks.filter(t => t.completed);
-        
+        // まだ持ち越していない未完了タスクだけ対象
+        const incompleteTasks = currentTasks.filter(t => !t.completed && !t.carriedOver);
+
         if (incompleteTasks.length === 0) return;
-        
+
         if (!catData.tasksByDate[nextDate]) catData.tasksByDate[nextDate] = [];
-        
+
         let carriedCount = 0;
         incompleteTasks.forEach(task => {
             if (catData.tasksByDate[nextDate].length < 6) {
-                catData.tasksByDate[nextDate].push(task);
+                // 翌日に新しいIDでコピー（どこから来たか記録）
+                catData.tasksByDate[nextDate].push({
+                    ...task,
+                    id: generateId(),
+                    carriedFrom: currentDate,
+                    carriedOver: false
+                });
+                // 元のタスクに「翌日へ持ち越し済み」フラグ
+                task.carriedOver = true;
                 carriedCount++;
             }
         });
-        
+
         if (carriedCount === 0) {
-            alert('翌日のタスクリストがすでに6つ埋まっているため、一部のタスクを繰り越しできません。');
+            alert('翌日のタスクリストがすでに6つ埋まっているため、繰り越しできません。');
             return;
         }
 
-        const remainingIncomplete = incompleteTasks.slice(carriedCount);
-        catData.tasksByDate[currentDate] = [...completedTasks, ...remainingIncomplete];
-        
         saveStore();
         renderWeek();
-        
+
         // Flash animation
         document.body.style.transition = "opacity 0.2s";
         document.body.style.opacity = "0.7";
@@ -805,4 +842,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // INIT
     switchCategory(currentCategory, true);
-});
+}
+
+// Call initApp when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    // DOM is already loaded
+    initApp();
+}

@@ -101,16 +101,63 @@ body[data-theme="dark"] .secondary-btn:hover { background: rgba(255,255,255,0.2)
 /* Authentication UI */
 .auth-container { display: flex; align-items: center; gap: 8px; }
 
-.user-info {
-    display: flex; align-items: center; gap: 10px;
-    background: rgba(0,0,0,0.03); border-radius: 8px; padding: 6px 12px;
-    border: 1px solid var(--border-color);
+/* Google ログインボタン */
+.google-login-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 8px; height: 36px;
+    background: #fff; color: #3c4043;
+    border: 1px solid #dadce0; font-size: 13px; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    transition: all 0.2s; cursor: pointer; white-space: nowrap;
 }
-body[data-theme="dark"] .user-info { background: rgba(255,255,255,0.08); }
+.google-login-btn:hover {
+    background: #f8f8f8;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border-color: #bbb;
+}
+body[data-theme="dark"] .google-login-btn {
+    background: rgba(255,255,255,0.1); color: #fff;
+    border-color: rgba(255,255,255,0.2);
+}
+body[data-theme="dark"] .google-login-btn:hover {
+    background: rgba(255,255,255,0.18);
+}
+
+.user-info {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(245,158,11,0.08); border-radius: 8px; padding: 6px 12px;
+    border: 1px solid rgba(245,158,11,0.3);
+}
+body[data-theme="dark"] .user-info { background: rgba(245,158,11,0.1); }
+
+.sync-icon { font-size: 14px; }
 
 .user-email {
     font-size: 12px; color: var(--text-muted); font-weight: 500;
     max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* 持ち越しタスクのスタイル */
+.task-item.carried-over {
+    opacity: 0.55;
+}
+.task-item.carried-over .task-text {
+    color: var(--text-muted);
+}
+
+.carried-badge {
+    display: inline-block; margin-left: 6px;
+    font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 4px; background: rgba(245,158,11,0.15);
+    color: #f59e0b; border: 1px solid rgba(245,158,11,0.3);
+    vertical-align: middle; white-space: nowrap;
+}
+.carried-from-badge {
+    display: inline-block; margin-left: 6px;
+    font-size: 10px; font-weight: 700; padding: 1px 6px;
+    border-radius: 4px; background: rgba(59,130,246,0.12);
+    color: #3b82f6; border: 1px solid rgba(59,130,246,0.3);
+    vertical-align: middle; white-space: nowrap;
 }
 
 .main-content {
@@ -163,12 +210,16 @@ body[data-theme="dark"] .icon-btn:hover { background: rgba(255,255,255,0.1); }
     animation: fadeIn 0.5s ease-out forwards; transition: background 0.4s ease, border-color 0.4s ease;
 }
 
-.day-card.today-card { border: 2px solid var(--primary-color); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15); }
+/* 今日のカード：アクセントカラーの枠（ライト・ダーク共通） */
+.day-card.today-card {
+    border: 2px solid #f59e0b;
+    box-shadow: 0 8px 32px 0 rgba(245, 158, 11, 0.25);
+}
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 .card-header h2 { font-size: 16px; margin: 0 0 16px; color: var(--text-color); }
-.today-card .card-header h2 { color: var(--primary-color); font-weight: 700; }
+.today-card .card-header h2 { color: #f59e0b; -webkit-text-fill-color: #f59e0b; font-weight: 700; }
 
 .task-input-section { display: flex; gap: 8px; margin-bottom: 16px; }
 
